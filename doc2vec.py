@@ -1,17 +1,17 @@
-batch_size = context_window*256
+batch_size = 256
 embedding_size = 100 # Dimension of the embedding vector.
 softmax_width = embedding_size # +embedding_size2+embedding_size3
 num_sampled = 50 # Number of negative examples to sample.
-sum_ids = np.repeat(np.arange(batch_size/context_window),context_window)
+sum_ids = np.repeat(np.arange(batch_size),context_window)
 
 
 graph = tf.Graph()
 
 with graph.as_default(), tf.device('/cpu:0'):
     # Input data.
-    train_word_dataset = tf.placeholder(tf.int32, shape=[batch_size])
-    train_doc_dataset = tf.placeholder(tf.int32, shape=[batch_size/context_window])
-    train_labels = tf.placeholder(tf.int32, shape=[batch_size/context_window, 1])
+    train_word_dataset = tf.placeholder(tf.int32, shape=[batch_size*context_window])
+    train_doc_dataset = tf.placeholder(tf.int32, shape=[batch_size, 1])
+    train_labels = tf.placeholder(tf.int32, shape=[batch_size, 1])
 
     segment_ids = tf.constant(sum_ids, dtype=tf.int32)
 
@@ -42,17 +42,18 @@ data_idx = 0
 def generate_batch(batch_size, context_window, x, document, target):
     global data_idx
 
-    batch_labels = collections.deque(maxlen=batch_size)
-    batch_doc_data = collections.deque(maxlen=batch_size)
-    batch_word_data = collections.deque(maxlen=batch_size*context_window)
-    for _ in range(batch_size):
-        batch_doc_data.append(document[data_idx])
-        batch_labels.append(target[data_idx])
-
-#         idx = np.where(hashtag_doc==document[data_idx])
-        for i in range(context_window):
-            batch_word_data.append(x[context_window*data_idx+i])
-        data_idx = (data_idx + 1) % len(data)
+    if data_idx+batch_size<data_len:
+        batch_labels = labels[data_idx:data_idx+batch_size]
+        batch_doc_data = doc[data_idx:data_idx+batch_size]
+        batch_word_data = context[data_idx:data_idx+batch_size]
+        data_idx += batch_size
+    else:
+        overlay = batch_size - (data_len-data_idx)
+        batch_labels = np.vstack([labels[data_idx:data_len],labels[:overlay]])
+        batch_doc_data = np.vstack([doc[data_idx:data_len],doc[:overlay]])
+        batch_word_data = np.vstack([context[data_idx:data_len],context[:overlay]])
+        data_idx = overlay
+    batch_word_data = np.reshape(batch_word_data,(-1,1))
 
     return batch_labels, batch_word_data, batch_doc_data
 
